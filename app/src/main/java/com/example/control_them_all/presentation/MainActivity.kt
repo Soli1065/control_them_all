@@ -1,4 +1,4 @@
-package com.example.controlthemall_watch.presentation
+package com.example.control_them_all.presentation
 
 import android.content.Context
 import android.hardware.Sensor
@@ -6,6 +6,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
@@ -22,12 +23,17 @@ import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 
 class MainActivity : ComponentActivity() {
+    private val TAG = "WatchMain"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.d(TAG, "MainActivity onCreate")
+        println("✅ MainActivity created")
 
         val sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         val sensorList = sensorManager.getSensorList(Sensor.TYPE_ALL)
+        Log.d(TAG, "Found ${sensorList.size} sensors")
+        println("✅ Found ${sensorList.size} sensors")
 
         setContent {
             MaterialTheme {
@@ -47,6 +53,8 @@ class MainActivity : ComponentActivity() {
                     ) { backStackEntry ->
                         val sensorType = backStackEntry.arguments?.getInt("sensorType") ?: -1
                         val sensorName = backStackEntry.arguments?.getString("sensorName") ?: ""
+                        Log.d(TAG, "Navigating to sensor_detail: type=$sensorType, name=$sensorName")
+                        println("➡️ sensor_detail: $sensorType - $sensorName")
                         SensorDetailScreen(sensorType, sensorName, sensorManager)
                     }
                 }
@@ -76,12 +84,17 @@ fun SensorListScreen(sensors: List<Sensor>, navController: NavHostController) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
+                            Log.d("WatchMain", "Clicked: ${sensor.name} (type: ${sensor.type})")
+                            println("🟢 Clicked sensor: ${sensor.name}")
                             navController.navigate("sensor_detail/${sensor.type}/${sensor.name}")
                         }
                         .padding(vertical = 6.dp)
                 ) {
                     Text(text = sensor.name, style = MaterialTheme.typography.titleSmall)
-                    Text(text = "Type: ${sensor.type}, Vendor: ${sensor.vendor}", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        text = "Type: ${sensor.type}, Vendor: ${sensor.vendor}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
         }
@@ -91,22 +104,31 @@ fun SensorListScreen(sensors: List<Sensor>, navController: NavHostController) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SensorDetailScreen(sensorType: Int, sensorName: String, sensorManager: SensorManager) {
+    val TAG = "SensorScreen"
     val values = remember { mutableStateListOf<Float>() }
-    val listener = rememberUpdatedState(newValue = object : SensorEventListener {
-        override fun onSensorChanged(event: SensorEvent) {
-            values.clear()
-            values.addAll(event.values.toList())
+    DisposableEffect(sensorType) {
+        val listener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent) {
+                values.clear()
+                values.addAll(event.values.toList())
+                Log.d("SensorScreen", "Sensor [$sensorType] updated: ${event.values.joinToString(",")}")
+            }
+
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
         }
 
-        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-    })
-
-    DisposableEffect(Unit) {
         val sensor = sensorManager.getDefaultSensor(sensorType)
-        sensorManager.registerListener(listener.value, sensor, SensorManager.SENSOR_DELAY_UI)
+        if (sensor == null) {
+            Log.e("SensorScreen", "Sensor not found for type: $sensorType")
+            println("❌ Sensor not found: $sensorType")
+        } else {
+            sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_UI)
+            Log.d("SensorScreen", "✅ Listener registered for sensor: $sensorType")
+        }
 
         onDispose {
-            sensorManager.unregisterListener(listener.value)
+            sensorManager.unregisterListener(listener)
+            Log.d("SensorScreen", "🛑 Listener unregistered for sensor: $sensorType")
         }
     }
 

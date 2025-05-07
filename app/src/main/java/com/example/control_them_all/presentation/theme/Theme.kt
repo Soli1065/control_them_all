@@ -1,4 +1,4 @@
-package com.example.controlthemall_watch.presentation.theme
+package com.example.control_them_all.presentation.theme
 
 import androidx.compose.runtime.Composable
 import androidx.wear.compose.material.MaterialTheme

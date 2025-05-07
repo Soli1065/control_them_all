@@ -1,4 +1,4 @@
-package com.example.controlthemall_watch.tile
+package com.example.control_them_all.tile
 
 import android.content.Context
 import androidx.wear.protolayout.ColorBuilders.argb

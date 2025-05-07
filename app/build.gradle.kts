@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.controlthemall_watch"
+    namespace = "com.example.control_them_all"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.controlthemall_watch"
+        applicationId = "com.example.control_them_all"
         minSdk = 30
         targetSdk = 34
         versionCode = 1

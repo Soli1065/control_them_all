@@ -1,4 +1,4 @@
-package com.example.controlthemall_watch.complication
+package com.example.control_them_all.complication
 
 import androidx.wear.watchface.complications.data.ComplicationData
 import androidx.wear.watchface.complications.data.ComplicationType
