@@ -5,16 +5,20 @@ import android.util.Log
 import androidx.annotation.NonNull
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import com.google.android.gms.wearable.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.tasks.await
 import org.json.JSONObject
-import com.google.android.gms.tasks.await
 
 class MainActivity : FlutterActivity(), MessageClient.OnMessageReceivedListener {
 
-    private val CHANNEL = "sensor_channel"
+    private val METHOD_CHANNEL = "sensor_channel"
+    private val EVENT_CHANNEL = "sensor_result_stream"
     private val TAG = "FlutterWear"
+
+    private var eventSink: EventChannel.EventSink? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -24,19 +28,35 @@ class MainActivity : FlutterActivity(), MessageClient.OnMessageReceivedListener 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
-            if (call.method == "sendSensorCommand") {
-                val sensorType = call.argument<Int>("sensorType") ?: 1
-                val mode = call.argument<String>("mode") ?: "snapshot"
-                val duration = call.argument<Int>("duration") ?: 3000
+        // 🔹 MethodChannel: Flutter → Native (send command)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, METHOD_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                if (call.method == "sendSensorCommand") {
+                    val sensorType = call.argument<Int>("sensorType") ?: 1
+                    val mode = call.argument<String>("mode") ?: "snapshot"
+                    val duration = call.argument<Int>("duration") ?: 3000
 
-                Log.d(TAG, "Preparing to send sensor command: type=$sensorType, mode=$mode, duration=$duration")
-                sendMessageToWatch(sensorType, mode, duration)
-                result.success("Message sent")
-            } else {
-                result.notImplemented()
+                    Log.d(TAG, "📤 Sending command: type=$sensorType, mode=$mode, duration=$duration")
+                    sendMessageToWatch(sensorType, mode, duration)
+                    result.success("Message sent")
+                } else {
+                    result.notImplemented()
+                }
             }
-        }
+
+        // 🔹 EventChannel: Native → Flutter (stream sensor_result)
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, EVENT_CHANNEL)
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    Log.d(TAG, "🎧 Flutter started listening for sensor_result")
+                    eventSink = events
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    Log.d(TAG, "🛑 Flutter stopped listening")
+                    eventSink = null
+                }
+            })
     }
 
     private fun sendMessageToWatch(sensorType: Int, mode: String, duration: Int) {
@@ -47,8 +67,6 @@ class MainActivity : FlutterActivity(), MessageClient.OnMessageReceivedListener 
         }
 
         val message = json.toString().toByteArray()
-        Log.d(TAG, "Sending message payload: ${json.toString()}")
-
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val nodes = Wearable.getNodeClient(applicationContext).connectedNodes.await()
@@ -58,8 +76,7 @@ class MainActivity : FlutterActivity(), MessageClient.OnMessageReceivedListener 
                 }
 
                 for (node in nodes) {
-                    Log.d(TAG, "✅ Found node: ${node.displayName} (${node.id})")
-
+                    Log.d(TAG, "✅ Found node: ${node.displayName}")
                     Wearable.getMessageClient(applicationContext)
                         .sendMessage(node.id, "/start_sensor", message)
                         .addOnSuccessListener {
@@ -70,7 +87,7 @@ class MainActivity : FlutterActivity(), MessageClient.OnMessageReceivedListener 
                         }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Error sending message to watch: ${e.message}")
+                Log.e(TAG, "❌ Exception sending message: ${e.message}")
             }
         }
     }
@@ -90,12 +107,13 @@ class MainActivity : FlutterActivity(), MessageClient.OnMessageReceivedListener 
     override fun onMessageReceived(event: MessageEvent) {
         val path = event.path
         val data = String(event.data)
-        Log.d(TAG, "📬 Message received on path: $path")
-        Log.d(TAG, "📦 Data: $data")
+
+        Log.d(TAG, "📬 Received on path: $path")
+        Log.d(TAG, "📦 Raw data: $data")
 
         if (path == "/sensor_result") {
-            println("🎯 Sensor Result Received: $data")
-            // TODO: Pass this to Flutter (via EventChannel or state)
+            eventSink?.success(data)
+            Log.d(TAG, "🚀 Forwarded to Flutter via EventChannel")
         }
     }
 }
